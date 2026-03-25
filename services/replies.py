@@ -16,18 +16,18 @@ def get_reply(message: str) -> str:
     order_keywords = ["order", "buy", "purchase", "want", "chahiye", "lena"]
 
     if any(word in message for word in price_keywords):
-        return "Hi! Our prices vary by product. Please tell us which item you're interested in and we'll share the exact price. 😊"
+        return "Hi! Our prices vary by product. Please tell us which item you're interested in and we'll share the exact price. "
 
     if any(word in message for word in delivery_keywords):
         return "We deliver all across Pakistan! Delivery takes 2-3 working days. Cash on delivery is available. 🚚"
 
     if any(word in message for word in available_keywords):
-        return "Yes we're open and taking orders! Tell us what you're looking for and we'll check availability for you. ✅"
+        return "Yes we're open and taking orders! Tell us what you're looking for and we'll check availability for you. "
 
     if any(word in message for word in location_keywords):
-        return "We're an online store operating across Pakistan. No physical store — but we deliver right to your door! 📦"
+        return "We're an online store operating across Pakistan. No physical store — but we deliver right to your door! "
 
     if any(word in message for word in order_keywords):
-        return "Great! We'd love to help you place an order. Please tell us: 1) Which product 2) Your name 3) Your address and we'll get it sorted! 🛍️"
+        return "Great! We'd love to help you place an order. Please tell us: 1) Which product 2) Your name 3) Your address and we'll get it sorted! "
 
     return "Assalam o Alaikum! Thanks for reaching out to us. How can we help you today? 😊"
