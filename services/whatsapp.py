@@ -16,7 +16,9 @@ async def send_message(to: str, text: str):
     token = os.getenv("WHATSAPP_TOKEN")
     phone_number_id = os.getenv("PHONE_NUMBER_ID")
 
-    url = f"https://graph.facebook.com/v18.0/{phone_id}/messages"
+    phone_number_id = os.getenv("PHONE_NUMBER_ID")
+
+    url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
 
     headers = {
         "Authorization": f"Bearer {token}",
