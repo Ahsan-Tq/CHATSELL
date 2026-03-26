@@ -12,6 +12,8 @@
 # can order at the same time without mixing up their data.
 # ============================================================
 
+from ..models.database import save_order
+
 order_sessions = {}
 
 def get_reply(message: str, phone_number: str) -> str:
@@ -76,6 +78,7 @@ def handle_order_flow(message: str, phone_number: str) -> str:
 
         # Clear the session — order is complete
         completed_order = order_sessions.pop(phone_number)
+        save_order(phone_number, product, name, address)
 
         return (
             f"✅ *Order Confirmed!*\n\n"
