@@ -12,7 +12,10 @@
 # can order at the same time without mixing up their data.
 # ============================================================
 
-from ..models.database import save_order
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from modules.database import save_order
 
 order_sessions = {}
 
