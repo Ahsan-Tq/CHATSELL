@@ -58,29 +58,38 @@ def handle_order_flow(message: str, phone_number: str) -> str:
     step = session["step"]
 
     if step == 1:
-        # Customer just told us the product
-        order_sessions[phone_number]["product"] = message
+        # Save what they said and ask them to confirm
+        order_sessions[phone_number]["product_raw"] = message
         order_sessions[phone_number]["step"] = 2
-        return f"Perfect! You want *{message}*. 👍\n\nWhat's your full name?"
+        return (
+            f"You want to order: *{message}*\n\n"
+            f"Is this correct? Reply *YES* to confirm or *NO* to change it."
+        )
 
     elif step == 2:
-        # Customer just told us their name
-        order_sessions[phone_number]["name"] = message
-        order_sessions[phone_number]["step"] = 3
-        return f"Got it, {message}! 😊\n\nWhat's your delivery address?"
+        if message.lower() in ["yes", "haan", "ha", "haa", "ji", "ji haan"]:
+            # Confirmed — move to name
+            order_sessions[phone_number]["product"] = order_sessions[phone_number]["product_raw"]
+            order_sessions[phone_number]["step"] = 3
+            return "Great! What's your full name?"
+        else:
+            # They said no — ask again cleanly
+            order_sessions[phone_number]["step"] = 1
+            return "No problem! Please type only the product name you want to order:"
 
     elif step == 3:
-        # Customer just told us their address
-        order_sessions[phone_number]["address"] = message
+        order_sessions[phone_number]["name"] = message
         order_sessions[phone_number]["step"] = 4
+        return f"Got it, {message}! 😊\n\nWhat's your delivery address?"
 
-        # Pull all order details
+    elif step == 4:
+        order_sessions[phone_number]["address"] = message
+
         product = order_sessions[phone_number]["product"]
         name = order_sessions[phone_number]["name"]
         address = message
 
-        # Clear the session — order is complete
-        completed_order = order_sessions.pop(phone_number)
+        order_sessions.pop(phone_number)
         save_order(phone_number, product, name, address)
 
         return (
@@ -88,7 +97,7 @@ def handle_order_flow(message: str, phone_number: str) -> str:
             f"📦 Product: {product}\n"
             f"👤 Name: {name}\n"
             f"📍 Address: {address}\n\n"
-            f"We'll deliver your order within 2-3 working days. "
+            f"We'll deliver within 2-3 working days. "
             f"Our team will contact you shortly. Thank you! 🙏"
         )
 
