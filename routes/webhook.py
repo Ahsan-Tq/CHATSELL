@@ -1,9 +1,9 @@
 # ============================================================
 # CHATSELL — WEBHOOK ROUTE
-# This file is the entry point for all WhatsApp messages.
-# When a customer sends a message, Meta sends it here first.
-# We extract the message text and phone number from the data
-# then pass it to the reply engine to figure out what to send back.
+# Entry point for all incoming WhatsApp messages.
+# Extracts the message text and phone number then passes
+# both to the reply engine. Phone number is important because
+# it lets us track where each customer is in the order flow.
 # ============================================================
 
 import os
@@ -31,7 +31,7 @@ async def receive_message(request: Request):
 
     try:
         changes = data["entry"][0]["changes"][0]["value"]
-        
+
         if "messages" not in changes:
             return {"status": "ignored"}
 
@@ -41,7 +41,7 @@ async def receive_message(request: Request):
 
         print(f"Message from {from_number}: {message_text}")
 
-        reply = get_reply(message_text)
+        reply = get_reply(message_text, from_number)
         await send_message(from_number, reply)
 
     except Exception as e:
