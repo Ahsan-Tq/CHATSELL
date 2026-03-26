@@ -40,11 +40,10 @@ def get_reply(message: str, phone_number: str) -> str:
 
     if any(word in message for word in location_keywords):
         return "We're an online store operating across Pakistan. No physical store — but we deliver right to your door! 📦"
-
+    
     if any(word in message for word in order_keywords):
-        # Start the order flow for this customer
         order_sessions[phone_number] = {"step": 1}
-        return "Great! Let's place your order. 🛍️\n\nWhat product are you interested in?"
+        return "Great! Let's place your order. 🛍️\n\nPlease type only the product name you want to order:"
 
     return "Assalam o Alaikum! Thanks for reaching out. How can we help you today? 😊"
 
