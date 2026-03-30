@@ -6,24 +6,32 @@ export default function Upgrade() {
   return (
     <div className="min-h-screen bg-gray-100">
 
-      <div className="bg-white px-5 py-4 flex items-center gap-4">
-        <button onClick={() => navigate('/membership')} className="text-green-700 text-xl">←</button>
-        <h2 className="text-lg font-bold flex-1 text-center">Upgrade Plan</h2>
+      {/* Header */}
+      <div className="bg-white px-5 py-4 flex items-center gap-4 shadow-sm">
+        <button onClick={() => navigate('/membership')} className="text-green-700 text-xl font-bold">←</button>
+        <h2 className="text-lg font-bold flex-1 text-center pr-6">Upgrade Plan</h2>
       </div>
 
-      <div className="px-5 py-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
-          <p className="text-xl font-bold mb-3">Upgrade your plan</p>
-          <p className="text-gray-500 text-sm mb-4">
+      {/* Message Card Container */}
+      <div className="px-5 py-10">
+        <div className="bg-white rounded-2xl p-8 shadow-sm text-center">
+          
+          <h3 className="text-lg font-bold text-gray-900 mb-4">
+            Upgrade your plan
+          </h3>
+          
+          <p className="text-gray-600 text-sm mb-4">
             To upgrade your Chatsell membership, contact our support team.
           </p>
-          <p className="font-bold text-sm mb-4">support@chatsell.com</p>
-          <p className="text-gray-500 text-sm mb-6">
+          
+          <p className="font-bold text-gray-900 text-sm mb-4">
+            support@chatsell.com
+          </p>
+          
+          <p className="text-gray-500 text-sm">
             Our team will help you activate your new plan quickly.
           </p>
-          <button className="w-full bg-green-700 text-white rounded-full py-4 font-semibold text-sm">
-            Contact Support
-          </button>
+
         </div>
       </div>
 
