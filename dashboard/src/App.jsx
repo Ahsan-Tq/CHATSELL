@@ -7,6 +7,7 @@ import Account from './pages/account'
 import Membership from './pages/membership'
 import Upgrade from './pages/upgrade'
 import EditProfile from './pages/editprofile'
+import ProtectedRoute from './components/protectedroute'
 
 export default function App() {
   return (
@@ -14,13 +15,13 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/pending" element={<PendingOrders />} />
-        <Route path="/completed" element={<CompletedOrders />} />
-        <Route path="/account" element={<Account />} />
-        <Route path="/membership" element={<Membership />} />
-        <Route path="/upgrade" element={<Upgrade />} />
-        <Route path="/editprofile" element={<EditProfile />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/pending" element={<ProtectedRoute><PendingOrders /></ProtectedRoute>} />
+        <Route path="/completed" element={<ProtectedRoute><CompletedOrders /></ProtectedRoute>} />
+        <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
+        <Route path="/membership" element={<ProtectedRoute><Membership /></ProtectedRoute>} />
+        <Route path="/upgrade" element={<ProtectedRoute><Upgrade /></ProtectedRoute>} />
+        <Route path="/editprofile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   )
