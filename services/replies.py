@@ -10,8 +10,8 @@
 # The order_sessions dictionary tracks where each customer
 # is in the order flow using their phone number as the key.
 # The flower_catalog is a simple built-in product database.
-# When a customer confirms their order we validate it against
-# the catalog before proceeding so random products cant be ordered.
+# When a customer mentions a product we fuzzy match it against
+# the catalog so partial names like "pink tulips" still work.
 # ============================================================
 
 from modules.database import save_order
@@ -32,6 +32,24 @@ def format_catalog() -> str:
     for flower in flower_catalog:
         catalog_text += f"• {flower['name']} — {flower['price']}\n"
     return catalog_text
+
+def match_product(message: str):
+    message_lower = message.lower()
+    # First try full name match
+    full_match = next(
+        (f for f in flower_catalog if f["name"].lower() in message_lower),
+        None
+    )
+    if full_match:
+        return full_match
+    # Then try partial word match
+    partial_match = next(
+        (f for f in flower_catalog if any(
+            word in f["name"].lower() for word in message_lower.split() if len(word) > 2
+        )),
+        None
+    )
+    return partial_match
 
 def get_reply(message: str, phone_number: str) -> str:
 
@@ -87,12 +105,21 @@ def get_reply(message: str, phone_number: str) -> str:
         )
 
     if any(word in message for word in order_keywords):
-        order_sessions[phone_number] = {"step": 1}
-        return (
-            "Let's place your order! 📦\n\n"
-            + format_catalog() +
-            "\nPlease type the name of the bouquet you'd like to order:"
-        )
+        # Check if they already mentioned a product in the same message
+        matched = match_product(message)
+        if matched:
+            order_sessions[phone_number] = {"step": 2, "product_raw": matched["name"]}
+            return (
+                f"You'd like to order: *{matched['name']}* 🌹\n\n"
+                f"Is this correct? Reply *YES* to confirm or *NO* to change it."
+            )
+        else:
+            order_sessions[phone_number] = {"step": 1}
+            return (
+                "Let's place your order! 📦\n\n"
+                + format_catalog() +
+                "\nPlease type the name of the bouquet you'd like to order:"
+            )
 
     if any(word in message for word in yes_keywords):
         order_sessions[phone_number] = {"step": 1}
@@ -100,6 +127,15 @@ def get_reply(message: str, phone_number: str) -> str:
             "Let's place your order! 📦\n\n"
             + format_catalog() +
             "\nPlease type the name of the bouquet you'd like to order:"
+        )
+
+    # Check if they just typed a product name directly
+    matched = match_product(message)
+    if matched:
+        order_sessions[phone_number] = {"step": 2, "product_raw": matched["name"]}
+        return (
+            f"You'd like to order: *{matched['name']}* 🌹\n\n"
+            f"Is this correct? Reply *YES* to confirm or *NO* to change it."
         )
 
     return (
@@ -114,27 +150,33 @@ def handle_order_flow(message: str, phone_number: str) -> str:
     step = session["step"]
 
     if step == 1:
-        order_sessions[phone_number]["product_raw"] = message
-        order_sessions[phone_number]["step"] = 2
-        return (
-            f"You'd like to order: *{message}* 🌹\n\n"
-            f"Is this correct? Reply *YES* to confirm or *NO* to change it."
-        )
+        matched = match_product(message)
+        if matched:
+            order_sessions[phone_number]["product_raw"] = matched["name"]
+            order_sessions[phone_number]["step"] = 2
+            return (
+                f"You'd like to order: *{matched['name']}* 🌹\n\n"
+                f"Is this correct? Reply *YES* to confirm or *NO* to change it."
+            )
+        else:
+            order_sessions[phone_number]["product_raw"] = message
+            order_sessions[phone_number]["step"] = 2
+            return (
+                f"You'd like to order: *{message}* 🌹\n\n"
+                f"Is this correct? Reply *YES* to confirm or *NO* to change it."
+            )
 
     elif step == 2:
         if message.lower() in ["yes", "haan", "ha", "haa", "ji", "ji haan", "yep", "yup", "yeah", "sure", "bilkul"]:
-            product_raw = order_sessions[phone_number]["product_raw"].lower()
-            matched = next(
-                (f for f in flower_catalog if f["name"].lower() in product_raw or product_raw in f["name"].lower()),
-                None
-            )
+            product_raw = order_sessions[phone_number]["product_raw"]
+            matched = match_product(product_raw)
 
             if not matched:
                 order_sessions[phone_number]["step"] = 1
                 return (
                     "Sorry, we couldn't find that in our collection. Please choose from below:\n\n"
                     + format_catalog() +
-                    "\nPlease type the exact bouquet name:"
+                    "\nPlease type the bouquet name:"
                 )
 
             order_sessions[phone_number]["product"] = matched["name"]
