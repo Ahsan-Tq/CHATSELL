@@ -10,6 +10,8 @@
 # The order_sessions dictionary tracks where each customer
 # is in the order flow using their phone number as the key.
 # The flower_catalog is a simple built-in product database.
+# When a customer confirms their order we validate it against
+# the catalog before proceeding so random products cant be ordered.
 # ============================================================
 
 from modules.database import save_order
@@ -26,7 +28,7 @@ flower_catalog = [
 ]
 
 def format_catalog() -> str:
-    catalog_text = "*Noreen's Flowers — Our Collection:*\n\n"
+    catalog_text = "🌸 *Noreen's Flowers — Our Collection:*\n\n"
     for flower in flower_catalog:
         catalog_text += f"• {flower['name']} — {flower['price']}\n"
     return catalog_text
@@ -41,12 +43,9 @@ def get_reply(message: str, phone_number: str) -> str:
     greet_keywords = ["hi", "hello", "hii", "helo", "aoa", "assalam", "salam", "hey"]
     if any(word in message for word in greet_keywords):
         return (
-            "Assalam o Alaikum! Welcome to *Noreen's Flowers*.\n\n"
+            "Assalam o Alaikum! Welcome to *Noreen's Flowers* 🌸\n\n"
             "We deliver fresh flowers across Pakistan.\n\n"
-            "You can ask about:\n"
-            "• Our flower collection & prices\n"
-            "• Delivery info\n"
-            "• Place an order\n\n"
+            "You can ask about our collection, prices, delivery or place an order.\n\n"
             "How can I help you today?"
         )
 
@@ -61,37 +60,36 @@ def get_reply(message: str, phone_number: str) -> str:
     if any(word in message for word in price_keywords):
         return (
             format_catalog() +
-            "\nAll bouquets are freshly prepared on order.\n"
-            "Which one would you like to order?"
+            "\nAll bouquets are freshly prepared on order. Which one would you like? 💐"
         )
 
     if any(word in message for word in delivery_keywords):
         return (
-            "We deliver all across Pakistan.\n\n"
-            "Delivery time: 4-5 working days\n"
-            "Cash on delivery available\n"
-            "Free gift wrapping on all orders\n\n"
+            "We deliver all across Pakistan 🚗\n\n"
+            "• Delivery time: 4-5 working days\n"
+            "• Cash on delivery available\n"
+            "• Free gift wrapping on all orders\n\n"
             "Want to place an order?"
         )
 
     if any(word in message for word in available_keywords):
         return (
-            "Yes, all our flowers are available and freshly prepared on order.\n\n"
+            "Yes, all our flowers are available and freshly prepared on order! ✅\n\n"
             + format_catalog() +
             "\nWhich bouquet would you like?"
         )
 
     if any(word in message for word in location_keywords):
         return (
-            "We are an online flower shop.\n\n"
+            "We are an online flower shop 🌺\n\n"
             "We deliver fresh flowers right to your doorstep across all of Pakistan.\n"
-            "No need to visit — just order and we'll handle the rest."
+            "No need to visit — just order and we'll handle the rest!"
         )
 
     if any(word in message for word in order_keywords):
         order_sessions[phone_number] = {"step": 1}
         return (
-            "Let's place your order.\n\n"
+            "Let's place your order! 📦\n\n"
             + format_catalog() +
             "\nPlease type the name of the bouquet you'd like to order:"
         )
@@ -99,17 +97,14 @@ def get_reply(message: str, phone_number: str) -> str:
     if any(word in message for word in yes_keywords):
         order_sessions[phone_number] = {"step": 1}
         return (
-            "Let's place your order.\n\n"
+            "Let's place your order! 📦\n\n"
             + format_catalog() +
             "\nPlease type the name of the bouquet you'd like to order:"
         )
 
     return (
-        "Thank you for reaching out to *Noreen's Flowers*.\n\n"
-        "You can ask us about:\n"
-        "• Prices & collection\n"
-        "• Delivery info\n"
-        "• Place an order\n\n"
+        "Thank you for reaching out to *Noreen's Flowers* 🌸\n\n"
+        "You can ask us about our collection, prices, delivery or place an order.\n\n"
         "How can we help you?"
     )
 
@@ -122,26 +117,41 @@ def handle_order_flow(message: str, phone_number: str) -> str:
         order_sessions[phone_number]["product_raw"] = message
         order_sessions[phone_number]["step"] = 2
         return (
-            f"You'd like to order: *{message}*\n\n"
+            f"You'd like to order: *{message}* 🌹\n\n"
             f"Is this correct? Reply *YES* to confirm or *NO* to change it."
         )
 
     elif step == 2:
         if message.lower() in ["yes", "haan", "ha", "haa", "ji", "ji haan", "yep", "yup", "yeah", "sure", "bilkul"]:
-            order_sessions[phone_number]["product"] = order_sessions[phone_number]["product_raw"]
+            product_raw = order_sessions[phone_number]["product_raw"].lower()
+            matched = next(
+                (f for f in flower_catalog if f["name"].lower() in product_raw or product_raw in f["name"].lower()),
+                None
+            )
+
+            if not matched:
+                order_sessions[phone_number]["step"] = 1
+                return (
+                    "Sorry, we couldn't find that in our collection. Please choose from below:\n\n"
+                    + format_catalog() +
+                    "\nPlease type the exact bouquet name:"
+                )
+
+            order_sessions[phone_number]["product"] = matched["name"]
             order_sessions[phone_number]["step"] = 3
-            return "Perfect. What's your full name?"
+            return f"Perfect! *{matched['name']}* it is.\n\nWhat's your full name?"
+
         else:
             order_sessions[phone_number]["step"] = 1
             return (
-                "No problem. Please type the name of the bouquet you'd like:\n\n"
+                "No problem! Please type the name of the bouquet you'd like:\n\n"
                 + format_catalog()
             )
 
     elif step == 3:
         order_sessions[phone_number]["name"] = message
         order_sessions[phone_number]["step"] = 4
-        return f"Got it, {message}. What's your delivery address?"
+        return f"Got it, {message}! What's your delivery address? 📍"
 
     elif step == 4:
         order_sessions[phone_number]["address"] = message
@@ -154,12 +164,12 @@ def handle_order_flow(message: str, phone_number: str) -> str:
         save_order(phone_number, product, name, address)
 
         return (
-            f"*Order Confirmed!*\n\n"
+            f"✅ *Order Confirmed!*\n\n"
             f"Bouquet: {product}\n"
             f"Name: {name}\n"
             f"Address: {address}\n\n"
             f"Your flowers will be delivered in 4-5 working days.\n"
-            f"Our team will contact you shortly. Thank you for choosing Noreen's Flowers!"
+            f"Our team will contact you shortly. Thank you for choosing Noreen's Flowers! 🌸"
         )
 
     return "Something went wrong. Type 'order' to start again."
