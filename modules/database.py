@@ -9,22 +9,23 @@
 # ============================================================
 
 import os
-from supabase import create_client
+from supabase import create_client, Client
 
-def get_db():
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    return create_client(url, key)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-def save_order(phone_number: str, product: str, name: str, address: str):
-    db = get_db()
-    order = {
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def save_order(phone_number: str, product: str, quantity: int, name: str, address: str):
+    result = supabase.table("orders").insert({
         "phone_number": phone_number,
         "product": product,
+        "quantity": quantity,
         "customer_name": name,
         "address": address,
         "status": "new"
-    }
-    result = db.table("orders").insert(order).execute()
-    print(f"Order saved: {result}")
+    }).execute()
+
+    print(result)
     return result
