@@ -7,19 +7,19 @@
 # Think of this as the front door of the building —
 # every request that comes in passes through here first.
 # ============================================================
-
-from fastapi import FastAPI
 from dotenv import load_dotenv
-from api import router as webhook_router
-from routes import orders
-
 load_dotenv()
 
-app = FastAPI()
+from fastapi import FastAPI
+from routes.webhook import router as webhook_router
+from routes.orders import router as orders_router
+
+app = FastAPI(title="Chatsell API")
 
 app.include_router(webhook_router)
-app.include_router(orders.router)
+app.include_router(orders_router)
+
 
 @app.get("/")
-def root():
-    return {"status": "Chatsell is running!"}
+async def root():
+    return {"status": "Chatsell is running"}

@@ -6,32 +6,33 @@
 # It takes the customer's phone number and the reply text
 # and fires it off to Meta's servers.
 # ============================================================
-
 import os
 import httpx
 
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-
 
 async def send_message(to: str, message: str):
-    if not WHATSAPP_TOKEN:
+    whatsapp_token = os.getenv("WHATSAPP_TOKEN")
+    phone_number_id = os.getenv("PHONE_NUMBER_ID")
+
+    if not whatsapp_token:
         raise ValueError("WHATSAPP_TOKEN is missing in .env")
 
-    if not PHONE_NUMBER_ID:
+    if not phone_number_id:
         raise ValueError("PHONE_NUMBER_ID is missing in .env")
+
+    url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
 
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {"body": message}
+        "text": {
+            "body": message
+        }
     }
 
-    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
-
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {whatsapp_token}",
         "Content-Type": "application/json"
     }
 
@@ -40,3 +41,4 @@ async def send_message(to: str, message: str):
         print("WhatsApp status:", response.status_code)
         print("WhatsApp response:", response.text)
         response.raise_for_status()
+        return response.json()

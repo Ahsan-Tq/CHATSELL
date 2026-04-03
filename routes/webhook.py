@@ -5,6 +5,28 @@
 # both to the reply engine. Phone number is important because
 # it lets us track where each customer is in the order flow.
 # ============================================================
+import os
+from fastapi import APIRouter, Request, Query
+from fastapi.responses import PlainTextResponse
+from services.replies import get_reply, call_grok
+from services.whatsapp import send_message
+
+router = APIRouter()
+
+
+@router.get("/webhook")
+async def verify_webhook(
+    hub_mode: str = Query(default=None, alias="hub.mode"),
+    hub_challenge: str = Query(default=None, alias="hub.challenge"),
+    hub_verify_token: str = Query(default=None, alias="hub.verify_token"),
+):
+    verify_token = os.getenv("VERIFY_TOKEN")
+
+    if hub_mode == "subscribe" and hub_verify_token == verify_token:
+        return PlainTextResponse(content=hub_challenge or "")
+
+    return PlainTextResponse(content="Verification failed", status_code=403)
+
 
 @router.post("/webhook")
 async def receive_message(request: Request):
@@ -12,20 +34,31 @@ async def receive_message(request: Request):
         data = await request.json()
         print("Incoming webhook data:", data)
 
-        changes = data["entry"][0]["changes"][0]["value"]
+        entry = data.get("entry", [])
+        if not entry:
+            return {"status": "ignored - no entry"}
 
-        if "messages" not in changes:
-            return {"status": "ignored"}
+        changes = entry[0].get("changes", [])
+        if not changes:
+            return {"status": "ignored - no changes"}
 
-        message = changes["messages"][0]
-        from_number = message.get("from")
-        message_type = message.get("type")
+        value = changes[0].get("value", {})
+        messages = value.get("messages", [])
+        if not messages:
+            return {"status": "ignored - no messages"}
+
+        message_obj = messages[0]
+        from_number = message_obj.get("from")
+        message_type = message_obj.get("type")
+
+        if not from_number:
+            return {"status": "ignored - no sender"}
 
         if message_type != "text":
             print(f"Ignored non-text message: {message_type}")
-            return {"status": "ignored - non-text"}
+            return {"status": f"ignored - {message_type}"}
 
-        message_text = message.get("text", {}).get("body", "").lower().strip()
+        message_text = message_obj.get("text", {}).get("body", "").strip()
 
         if not message_text:
             return {"status": "ignored - empty text"}
@@ -39,12 +72,14 @@ async def receive_message(request: Request):
                 reply = await call_grok(message_text, from_number)
             except Exception as e:
                 print(f"Grok error: {e}")
-                reply = "Thank you for reaching out to Noreen's Flowers! You can ask about our collection, prices, delivery or place an order."
+                reply = (
+                    "Thank you for reaching out to Noreen's Flowers. "
+                    "You can ask about our collection, prices, delivery or place an order."
+                )
 
         await send_message(from_number, reply)
         return {"status": "received"}
 
     except Exception as e:
-        print(f"Error in webhook: {e}")
+        print(f"Webhook error: {e}")
         return {"status": "error", "detail": str(e)}
-
