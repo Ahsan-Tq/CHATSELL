@@ -16,305 +16,335 @@
 
 import os
 import httpx
-from modules.database import save_order
-
-# Grok API configuration
-GROK_API_KEY = os.getenv("GROK_API_KEY")
-GROK_API_URL = "https://api.x.ai/v1/chat/completions"
+from datetime import datetime
 
 order_sessions = {}
 
 flower_catalog = [
-    {"name": "Red Roses Bouquet", "price": "PKR 1,200"},
-    {"name": "White Lilies Bunch", "price": "PKR 950"},
-    {"name": "Sunflower Arrangement", "price": "PKR 1,500"},
-    {"name": "Mixed Seasonal Bouquet", "price": "PKR 1,800"},
-    {"name": "Pink Tulips Bunch", "price": "PKR 1,100"},
-    {"name": "Lavender Dream Bouquet", "price": "PKR 2,000"},
+    {
+        "name": "Red Roses Bouquet",
+        "price": "PKR 1,200",
+        "aliases": ["red roses", "roses", "rose bouquet"],
+    },
+    {
+        "name": "White Lilies Bunch",
+        "price": "PKR 950",
+        "aliases": ["white lilies", "lilies", "lily bunch"],
+    },
+    {
+        "name": "Sunflower Arrangement",
+        "price": "PKR 1,500",
+        "aliases": ["sunflower", "sunflowers", "sunflower arrangement"],
+    },
+    {
+        "name": "Mixed Seasonal Bouquet",
+        "price": "PKR 1,800",
+        "aliases": ["mixed seasonal", "seasonal bouquet", "mixed bouquet"],
+    },
+    {
+        "name": "Pink Tulips Bunch",
+        "price": "PKR 1,100",
+        "aliases": ["pink tulips", "tulips", "tulip bunch"],
+    },
+    {
+        "name": "Lavender Dream Bouquet",
+        "price": "PKR 2,000",
+        "aliases": ["lavender", "lavender dream", "purple bouquet"],
+    },
 ]
 
 
 def format_catalog() -> str:
-    catalog_text = "*Noreen's Flowers — Our Collection:*\n\n"
+    lines = ["*Noreen's Flowers — Our Collection:*", ""]
     for flower in flower_catalog:
-        catalog_text += f"• {flower['name']} — {flower['price']}\n"
-    return catalog_text
+        lines.append(f"• {flower['name']} — {flower['price']}")
+    return "\n".join(lines)
 
 
 def match_product(message: str):
-    message_lower = message.lower()
+    message_lower = message.lower().strip()
 
-    full_match = next(
-        (f for f in flower_catalog if f["name"].lower() in message_lower),
-        None
-    )
-    if full_match:
-        return full_match
+    for flower in flower_catalog:
+        if flower["name"].lower() in message_lower:
+            return flower
 
-    partial_match = next(
-        (
-            f for f in flower_catalog
-            if any(word in f["name"].lower() for word in message_lower.split() if len(word) > 2)
-        ),
-        None
+    for flower in flower_catalog:
+        for alias in flower["aliases"]:
+            if alias in message_lower:
+                return flower
+
+    words = [word for word in message_lower.split() if len(word) > 2]
+    best_match = None
+    best_score = 0
+
+    for flower in flower_catalog:
+        searchable_text = " ".join([flower["name"].lower()] + flower["aliases"])
+        score = sum(1 for word in words if word in searchable_text)
+        if score > best_score:
+            best_score = score
+            best_match = flower
+
+    if best_score >= 1:
+        return best_match
+
+    return None
+
+
+def build_order_id(phone_number: str) -> str:
+    phone_suffix = phone_number[-4:] if phone_number else "0000"
+    timestamp = datetime.now().strftime("%H%M%S")
+    return f"ORD-{phone_suffix}-{timestamp}"
+
+
+def save_order_to_db(phone_number: str, product: str, customer_name: str, address: str):
+    try:
+        from modules.database import save_order
+        return save_order(
+            phone_number=phone_number,
+            product=product,
+            name=customer_name,
+            address=address
+        )
+    except Exception as e:
+        print(f"Save order error: {e}")
+        return None
+
+
+def handle_order_flow(message: str, phone_number: str) -> str:
+    session = order_sessions.get(phone_number, {})
+    step = session.get("step")
+    message_lower = message.lower().strip()
+
+    yes_words = ["yes", "y", "confirm", "correct", "ok", "okay", "haan", "han", "ji"]
+    no_words = ["no", "n", "change", "wrong", "nahi", "nah"]
+
+    if step == "choose_product":
+        matched = match_product(message)
+        if matched:
+            session["product"] = matched["name"]
+            session["step"] = "confirm_product"
+            order_sessions[phone_number] = session
+            return (
+                f"You'd like to order: *{matched['name']}*\n\n"
+                "Reply *YES* to confirm or *NO* to change it."
+            )
+
+        return (
+            "I could not find that in our catalog.\n\n"
+            f"{format_catalog()}\n\n"
+            "Please type the bouquet name you'd like to order."
+        )
+
+    if step == "confirm_product":
+        if any(word in message_lower for word in yes_words):
+            session["step"] = "ask_name"
+            order_sessions[phone_number] = session
+            return "Great. Please send your name for the order."
+
+        if any(word in message_lower for word in no_words):
+            session["step"] = "choose_product"
+            order_sessions[phone_number] = session
+            return (
+                f"{format_catalog()}\n\n"
+                "Please type the bouquet name you'd like to order."
+            )
+
+        matched = match_product(message)
+        if matched:
+            session["product"] = matched["name"]
+            session["step"] = "confirm_product"
+            order_sessions[phone_number] = session
+            return (
+                f"You'd like to order: *{matched['name']}*\n\n"
+                "Reply *YES* to confirm or *NO* to change it."
+            )
+
+        return "Please reply *YES* to confirm or *NO* to choose another bouquet."
+
+    if step == "ask_name":
+        session["customer_name"] = message.strip()
+        session["step"] = "ask_address"
+        order_sessions[phone_number] = session
+        return "Got it. Now please send your delivery address."
+
+    if step == "ask_address":
+        session["address"] = message.strip()
+
+        product = session.get("product", "Unknown Product")
+        customer_name = session.get("customer_name", "Customer")
+        address = session.get("address", "")
+        order_id = build_order_id(phone_number)
+
+        save_order_to_db(
+            phone_number=phone_number,
+            product=product,
+            customer_name=customer_name,
+            address=address
+        )
+
+        order_sessions.pop(phone_number, None)
+
+        return (
+            f"Thank you, {customer_name}. Your order for *{product}* has been noted.\n\n"
+            f"Order number: *{order_id}*\n"
+            "Our team will follow up with you shortly."
+        )
+
+    order_sessions.pop(phone_number, None)
+    return (
+        "Let's start your order again.\n\n"
+        f"{format_catalog()}\n\n"
+        "Please type the bouquet name you'd like to order."
     )
-    return partial_match
 
 
 async def call_grok(message: str, phone_number: str, context: str = "") -> str:
-    """
-    Call Grok API to handle out-of-flow messages.
-    Context includes customer history and catalog info.
-    """
-    if not GROK_API_KEY:
+    grok_api_key = os.getenv("GROK_API_KEY")
+    grok_api_url = "https://api.x.ai/v1/chat/completions"
+
+    if not grok_api_key:
         return (
             "Thank you for reaching out to Noreen's Flowers.\n\n"
-            "You can ask about our collection, prices, delivery or place an order.\n\n"
-            "How can we help?"
+            "You can ask about our collection, prices, delivery or place an order."
         )
 
-    system_prompt = f"""You are a WhatsApp customer service bot for Noreen's Flowers, a flower shop in Pakistan.
+    session_context = order_sessions.get(phone_number, {})
+    catalog_text = format_catalog()
 
-IMPORTANT RULES:
-1. Keep responses short (2-3 sentences max for WhatsApp)
-2. Always be friendly and professional
-3. Suggest relevant flowers from our catalog when possible
-4. If customer asks about products NOT in catalog, politely decline and suggest alternatives
-5. Encourage orders by showing catalog when relevant
-6. Do NOT generate prices - only use catalog prices
-7. Speak Urdu-friendly English (use "Assalam o Alaikum", "Inshallah", etc when appropriate)
+    system_prompt = f"""
+You are a WhatsApp customer support assistant for Noreen's Flowers in Pakistan.
 
-OUR CATALOG:
-{format_catalog()}
+Rules:
+1. Keep replies short and natural for WhatsApp.
+2. Be helpful and professional.
+3. Use only the catalog prices provided below.
+4. If a product is not available, politely say so and suggest the closest available product.
+5. Do not invent products or prices.
+6. If the customer wants to order, guide them toward choosing one item from the catalog.
 
-DELIVERY INFO:
-- Delivery: 4-5 working days across Pakistan
+Catalog:
+{catalog_text}
+
+Delivery details:
+- Delivery in 4 to 5 working days across Pakistan
 - Cash on Delivery available
 - Free gift wrapping
 
-Customer Message: {message}
-Previous Context: {context}
+Customer phone:
+{phone_number}
 
-Respond naturally as if you're a helpful flower shop assistant. Keep it conversational."""
+Session context:
+{session_context}
+
+Extra context:
+{context}
+""".strip()
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
-                GROK_API_URL,
+                grok_api_url,
                 headers={
-                    "Authorization": f"Bearer {GROK_API_KEY}",
-                    "Content-Type": "application/json"
+                    "Authorization": f"Bearer {grok_api_key}",
+                    "Content-Type": "application/json",
                 },
                 json={
                     "model": "grok-beta",
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": message}
+                        {"role": "user", "content": message},
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 150
+                    "max_tokens": 150,
                 },
-                timeout=10.0
             )
 
-            if response.status_code == 200:
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                return format_catalog() + "\nHow can we help?"
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
 
     except Exception as e:
         print(f"Grok API error: {e}")
-        return format_catalog() + "\nHow can we help?"
-
-
-def handle_order_flow(message: str, phone_number: str) -> str:
-    session = order_sessions[phone_number]
-    step = session["step"]
-    message_clean = message.strip()
-    message_lower = message_clean.lower()
-
-    if step == 1:
-        matched = match_product(message_clean)
-        if matched:
-            order_sessions[phone_number]["product_raw"] = matched["name"]
-            order_sessions[phone_number]["step"] = 2
-            return (
-                f"You'd like to order: *{matched['name']}*\n\n"
-                f"Is this correct? Reply *YES* to confirm or *NO* to change it."
-            )
-        else:
-            return (
-                "Sorry, we don't have that item. Here's what we offer:\n\n"
-                + format_catalog()
-                + "\nWhich bouquet would you like?"
-            )
-
-    elif step == 2:
-        yes_keywords = ["yes", "haan", "ha", "haa", "ji", "ji haan", "yep", "yup", "yeah", "sure", "bilkul"]
-
-        if message_lower in yes_keywords:
-            product_raw = order_sessions[phone_number]["product_raw"]
-            matched = match_product(product_raw)
-
-            if not matched:
-                order_sessions[phone_number]["step"] = 1
-                return (
-                    "Sorry, we couldn't find that in our collection. Please choose from below:\n\n"
-                    + format_catalog()
-                    + "\nPlease type the bouquet name:"
-                )
-
-            order_sessions[phone_number]["product"] = matched["name"]
-            order_sessions[phone_number]["step"] = 3
-            return f"Perfect! *{matched['name']}* it is.\n\nHow many would you like to order?"
-
-        else:
-            order_sessions[phone_number]["step"] = 1
-            return (
-                "No problem! Please type the name of the bouquet you'd like:\n\n"
-                + format_catalog()
-            )
-
-    elif step == 3:
-        if not message_clean.isdigit() or int(message_clean) <= 0:
-            return "Please enter a valid quantity, for example: 1, 2, or 3."
-
-        order_sessions[phone_number]["quantity"] = int(message_clean)
-        order_sessions[phone_number]["step"] = 4
-        return "Got it. What's your full name?"
-
-    elif step == 4:
-        order_sessions[phone_number]["name"] = message_clean
-        order_sessions[phone_number]["step"] = 5
-        return f"Got it, {message_clean}! What's your delivery address?"
-
-    elif step == 5:
-        order_sessions[phone_number]["address"] = message_clean
-
-        product = order_sessions[phone_number]["product"]
-        quantity = order_sessions[phone_number]["quantity"]
-        name = order_sessions[phone_number]["name"]
-        address = message_clean
-
-        order_sessions.pop(phone_number)
-
-        save_order(phone_number, product, quantity, name, address)
-
         return (
-            f"Order Confirmed!\n\n"
-            f"Bouquet: {product}\n"
-            f"Quantity: {quantity}\n"
-            f"Name: {name}\n"
-            f"Address: {address}\n\n"
-            f"Your flowers will be delivered in 4-5 working days.\n"
-            f"Our team will contact you shortly. Thank you for choosing Noreen's Flowers!"
+            "Sorry, I could not process that properly.\n\n"
+            "You can ask about our collection, prices, delivery or place an order."
         )
-
-    return "Something went wrong. Type 'order' to start again."
 
 
 def get_reply(message: str, phone_number: str) -> tuple[str, bool]:
-    """
-    Returns (reply_text, is_async)
-    is_async = True means this reply needs async execution (Grok call)
-    """
+    message_lower = message.lower().strip()
+    words = message_lower.split()
 
-    message = message.strip()
-
-    # ORDER FLOW
     if phone_number in order_sessions:
-        return (handle_order_flow(message, phone_number), False)
+        return handle_order_flow(message, phone_number), False
 
-    # FIRST MESSAGE GREETING
-    greet_keywords = ["hi", "hello", "hii", "helo", "aoa", "assalam", "salam", "hey"]
-    if any(word in message.lower() for word in greet_keywords):
+    greet_words = ["hi", "hello", "hey", "aoa", "salam", "hii", "helo"]
+    price_keywords = [
+        "price", "cost", "how much", "rate", "pricing", "daam", "qeemat",
+        "catalog", "catalogue", "menu", "collection", "products", "flowers"
+    ]
+    delivery_keywords = [
+        "delivery", "deliver", "shipping", "ship", "courier", "time",
+        "days", "kab", "kitne din"
+    ]
+    order_keywords = [
+        "order", "buy", "purchase", "book", "chahiye", "want", "need", "send"
+    ]
+    yes_keywords = ["yes", "haan", "han", "ji", "ok", "okay"]
+
+    if any(word in words for word in greet_words) or "assalam" in message_lower:
         return (
-            "Assalam o Alaikum! Welcome to *Noreen's Flowers* \n\n"
-            "We deliver fresh flowers across Pakistan.\n\n"
-            "You can ask about our collection, prices, delivery or place an order.\n\n"
-            "How can I help you today?",
-            False
+            "Assalam o Alaikum. Welcome to *Noreen's Flowers*.\n\n"
+            "You can ask about our collection, prices, delivery or place an order.",
+            False,
         )
 
-    # KEYWORD DETECTION
-    price_keywords = ["price", "cost", "kitna", "rate", "pricing", "how much", "charges", "daam", "qeemat", "collection", "products", "flowers", "kya hai", "menu"]
-    delivery_keywords = ["delivery", "deliver", "shipping", "ship", "courier", "time", "kab", "kitne din", "days"]
-    available_keywords = ["available", "stock", "in stock", "hai", "do you have", "milega", "milegi"]
-    location_keywords = ["location", "address", "where", "kahan", "pickup", "store", "shop"]
-    order_keywords = ["order", "buy", "purchase", "want", "chahiye", "lena", "order karna", "leni hai", "booking"]
-    yes_keywords = ["yes", "haan", "ha", "haa", "ji", "ji haan", "yep", "yup", "yeah", "sure", "bilkul"]
+    if any(keyword in message_lower for keyword in price_keywords):
+        return format_catalog(), False
 
-    message_lower = message.lower()
-
-    if any(word in message_lower for word in price_keywords):
+    if any(keyword in message_lower for keyword in delivery_keywords):
         return (
-            format_catalog()
-            + "\nAll bouquets are freshly prepared on order. Which one would you like?",
-            False
+            "We deliver across Pakistan in 4 to 5 working days.\n"
+            "Cash on Delivery is available, and gift wrapping is free.",
+            False,
         )
 
-    if any(word in message_lower for word in delivery_keywords):
-        return (
-            "We deliver all across Pakistan \n\n"
-            "• Delivery time: 4-5 working days\n"
-            "• Cash on delivery available\n"
-            "• Free gift wrapping on all orders\n\n"
-            "Want to place an order?",
-            False
-        )
-
-    if any(word in message_lower for word in available_keywords):
-        return (
-            "Yes, all our flowers are available and freshly prepared on order!\n\n"
-            + format_catalog()
-            + "\nWhich bouquet would you like?",
-            False
-        )
-
-    if any(word in message_lower for word in location_keywords):
-        return (
-            "We are an online flower shop \n\n"
-            "We deliver fresh flowers right to your doorstep across all of Pakistan.\n"
-            "No need to visit — just order and we'll handle the rest!",
-            False
-        )
-
-    if any(word in message_lower for word in order_keywords):
+    if any(keyword in message_lower for keyword in order_keywords):
         matched = match_product(message)
         if matched:
-            order_sessions[phone_number] = {"step": 2, "product_raw": matched["name"]}
+            order_sessions[phone_number] = {
+                "step": "confirm_product",
+                "product": matched["name"],
+            }
             return (
                 f"You'd like to order: *{matched['name']}*\n\n"
-                f"Is this correct? Reply *YES* to confirm or *NO* to change it.",
-                False
-            )
-        else:
-            order_sessions[phone_number] = {"step": 1}
-            return (
-                "Let's place your order!\n\n"
-                + format_catalog()
-                + "\nPlease type the name of the bouquet you'd like to order:",
-                False
+                "Reply *YES* to confirm or *NO* to change it.",
+                False,
             )
 
-    if any(word in message_lower for word in yes_keywords):
-        order_sessions[phone_number] = {"step": 1}
+        order_sessions[phone_number] = {"step": "choose_product"}
         return (
-            "Let's place your order!\n\n"
-            + format_catalog()
-            + "\nPlease type the name of the bouquet you'd like to order:",
-            False
-        )
+            f"{format_catalog()}\n\n"
+            "Please type the bouquet name you'd like to order."
+        ), False
+
+    if message_lower in yes_keywords:
+        order_sessions[phone_number] = {"step": "choose_product"}
+        return (
+            f"{format_catalog()}\n\n"
+            "Please type the bouquet name you'd like to order."
+        ), False
 
     matched = match_product(message)
     if matched:
-        order_sessions[phone_number] = {"step": 2, "product_raw": matched["name"]}
+        order_sessions[phone_number] = {
+            "step": "confirm_product",
+            "product": matched["name"],
+        }
         return (
             f"You'd like to order: *{matched['name']}*\n\n"
-            f"Is this correct? Reply *YES* to confirm or *NO* to change it.",
-            False
+            "Reply *YES* to confirm or *NO* to change it.",
+            False,
         )
 
-    # OUT OF FLOW: USE GROK
-    return (message, True)
+    return message, True

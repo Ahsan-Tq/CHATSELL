@@ -7,33 +7,36 @@
 # and fires it off to Meta's servers.
 # ============================================================
 
-
-
 import os
 import httpx
 
-async def send_message(to: str, text: str):
-    token = os.getenv("WHATSAPP_TOKEN")
-    phone_number_id = os.getenv("PHONE_NUMBER_ID")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
-    phone_number_id = os.getenv("PHONE_NUMBER_ID")
 
-    url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
+async def send_message(to: str, message: str):
+    if not WHATSAPP_TOKEN:
+        raise ValueError("WHATSAPP_TOKEN is missing in .env")
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    if not PHONE_NUMBER_ID:
+        raise ValueError("PHONE_NUMBER_ID is missing in .env")
 
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
-        "text": "text",
-        "text": { "body": text }
+        "type": "text",
+        "text": {"body": message}
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=payload, headers=headers)
-        print(f"WhatsApp API response: {response.status_code}")
+    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
 
-        
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(url, headers=headers, json=payload)
+        print("WhatsApp status:", response.status_code)
+        print("WhatsApp response:", response.text)
+        response.raise_for_status()

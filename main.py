@@ -10,15 +10,16 @@
 
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from routes import webhook, orders
+from api import router as webhook_router
+from routes import orders
 
-load_dotenv() 
+load_dotenv()
 
 app = FastAPI()
 
-app.include_router(webhook.router)
+app.include_router(webhook_router)
 app.include_router(orders.router)
 
 @app.get("/")
 def root():
-    return {"status": "Chatsell is running!"} 
+    return {"status": "Chatsell is running!"}

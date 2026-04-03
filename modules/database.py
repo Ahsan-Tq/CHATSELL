@@ -9,23 +9,33 @@
 # ============================================================
 
 import os
-from supabase import create_client, Client
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+from supabase import create_client
 
 
-def save_order(phone_number: str, product: str, quantity: int, name: str, address: str):
-    result = supabase.table("orders").insert({
+def get_supabase_client():
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+
+    if not supabase_url:
+        raise ValueError("SUPABASE_URL is missing in .env")
+
+    if not supabase_key:
+        raise ValueError("SUPABASE_KEY is missing in .env")
+
+    return create_client(supabase_url, supabase_key)
+
+
+def save_order(phone_number: str, product: str, name: str, address: str):
+    supabase = get_supabase_client()
+
+    payload = {
         "phone_number": phone_number,
         "product": product,
-        "quantity": quantity,
         "customer_name": name,
         "address": address,
         "status": "new"
-    }).execute()
+    }
 
-    print(result)
+    result = supabase.table("orders").insert(payload).execute()
+    print("Order insert result:", result)
     return result
