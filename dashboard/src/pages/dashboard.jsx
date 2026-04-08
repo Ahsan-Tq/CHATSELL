@@ -21,6 +21,7 @@ export default function Dashboard() {
 
     if (error) {
       console.error('Error fetching orders:', error)
+      setOrders([])
     } else {
       setOrders(data || [])
     }
@@ -28,59 +29,66 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  const parseOrderDate = (dateString) => {
-    if (!dateString) return null
+  const parseOrderDate = (value) => {
+    if (!value) return null
 
-    const normalized = dateString.includes('T')
-      ? dateString
-      : dateString.replace(' ', 'T')
+    let str = String(value).trim()
 
-    const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$$/.test(normalized)
-    const finalDateString = hasTimezone ? normalized : `$${normalized}Z`
+    // convert "2026-04-08 16:39:02.21079" to ISO-like format
+    str = str.replace(' ', 'T')
 
-    const parsed = new Date(finalDateString)
+    // trim microseconds to milliseconds because JS Date can fail on long fractions
+    str = str.replace(/\.(\d{3})\d+/, '.$$1')
 
-    return isNaN(parsed.getTime()) ? null : parsed
+    // if no timezone is present, treat it as UTC
+    if (!/(Z|[+-]\d{2}:\d{2})$$/i.test(str)) {
+      str += 'Z'
+    }
+
+    const date = new Date(str)
+    return isNaN(date.getTime()) ? null : date
   }
 
-  const getMinutesDiff = (dateString) => {
-    const orderDate = parseOrderDate(dateString)
+  const getMinutesDiff = (createdAt) => {
+    const orderDate = parseOrderDate(createdAt)
     if (!orderDate) return null
 
-    const diff = Math.floor((Date.now() - orderDate.getTime()) / 1000 / 60)
+    const diff = Math.floor((Date.now() - orderDate.getTime()) / 60000)
     return diff < 0 ? 0 : diff
   }
 
-  const timeAgo = (dateString) => {
-    const diff = getMinutesDiff(dateString)
+  const timeAgo = (createdAt) => {
+    const diff = getMinutesDiff(createdAt)
 
-    if (diff === null) return 'Invalid time'
+    if (diff === null) return 'Time error'
     if (diff < 1) return 'Just now'
     if (diff < 60) return `$${diff}m ago`
     if (diff < 1440) return `$${Math.floor(diff / 60)}h ago`
     return `$${Math.floor(diff / 1440)}d ago`
   }
 
-  const getAgeLabel = (dateString) => {
-    const diff = getMinutesDiff(dateString)
+  const getAgeLabel = (createdAt) => {
+    const diff = getMinutesDiff(createdAt)
     if (diff === null) return 'Old'
     return diff <= 720 ? 'New' : 'Old'
   }
 
-  const getAgeBadgeStyle = (dateString) => {
-    return getAgeLabel(dateString) === 'New'
+  const getAgeBadgeClass = (createdAt) => {
+    return getAgeLabel(createdAt) === 'New'
       ? 'bg-green-700 text-white'
       : 'bg-gray-300 text-gray-700'
   }
 
   const getCompletionLabel = (status) => {
-    return (status || '').toLowerCase() === 'completed' ? 'Completed' : 'Pending'
+    return String(status || '').toLowerCase() === 'completed'
+      ? 'Completed'
+      : 'Pending'
   }
 
-  const getCompletionBadgeStyle = (status) => {
-    return (status || '').toLowerCase() === 'completed'
+  const getCompletionBadgeClass = (status) => {
+    return String(status || '').toLowerCase() === 'completed'
       ? 'bg-blue-700 text-white'
-      : 'bg-yellow-500 text-white'
+      : 'bg-yellow-400 text-black'
   }
 
   const todayOrders = orders.filter((order) => {
@@ -97,11 +105,11 @@ export default function Dashboard() {
   })
 
   const pendingOrders = orders.filter(
-    (order) => (order.status || '').toLowerCase() !== 'completed'
+    (order) => String(order.status || '').toLowerCase() !== 'completed'
   )
 
   const completedOrders = orders.filter(
-    (order) => (order.status || '').toLowerCase() === 'completed'
+    (order) => String(order.status || '').toLowerCase() === 'completed'
   )
 
   return (
@@ -153,24 +161,22 @@ export default function Dashboard() {
                     {order.customer_name || 'Unknown Customer'}
                   </p>
                   <p className="text-gray-500 text-sm mt-1">
-                    {(order.product || '').length > 30
+                    {order.product && order.product.length > 30
                       ? `$${order.product.slice(0, 30)}...`
                       : order.product || 'No product'}
                   </p>
                 </div>
 
-                <div className="flex flex-col items-end gap-1">
-                  <span
-                    className={`text-xs px-3 py-1 rounded-full font-medium $${getAgeBadgeStyle(order.created_at)}`}
-                  >
-                    {getAgeLabel(order.created_at)}
-                  </span>
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium $${getAgeBadgeClass(order.created_at)}`}>
+                      {getAgeLabel(order.created_at)}
+                    </span>
 
-                  <span
-                    className={`text-xs px-3 py-1 rounded-full font-medium $${getCompletionBadgeStyle(order.status)}`}
-                  >
-                    {getCompletionLabel(order.status)}
-                  </span>
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium $${getCompletionBadgeClass(order.status)}`}>
+                      {getCompletionLabel(order.status)}
+                    </span>
+                  </div>
 
                   <span className="text-xs text-gray-400">
                     {timeAgo(order.created_at)}
