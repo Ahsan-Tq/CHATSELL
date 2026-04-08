@@ -12,8 +12,6 @@ export default function Dashboard() {
   }, [])
 
   const fetchOrders = async () => {
-    setLoading(true)
-
     const { data, error } = await supabase
       .from('orders')
       .select('*')
@@ -21,7 +19,6 @@ export default function Dashboard() {
 
     if (error) {
       console.error('Error fetching orders:', error)
-      setOrders([])
     } else {
       setOrders(data || [])
     }
@@ -32,67 +29,84 @@ export default function Dashboard() {
   const parseOrderDate = (value) => {
     if (!value) return null
 
-    let str = String(value).trim()
-
-    // convert "2026-04-08 16:39:02.21079" to ISO-like format
-    str = str.replace(' ', 'T')
-
-    // trim microseconds to milliseconds because JS Date can fail on long fractions
-    str = str.replace(/\.(\d{3})\d+/, '.$$1')
-
-    // if no timezone is present, treat it as UTC
-    if (!/(Z|[+-]\d{2}:\d{2})$$/i.test(str)) {
-      str += 'Z'
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? null : value
     }
 
-    const date = new Date(str)
-    return isNaN(date.getTime()) ? null : date
+    const str = String(value).trim()
+
+    // Handles: 2026-04-08 16:39:02.21079
+    const simpleTimestampMatch = str.match(
+      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$$/
+    )
+
+    if (simpleTimestampMatch) {
+      const [, year, month, day, hour, minute, second, fraction = '0'] = simpleTimestampMatch
+      const milliseconds = Number(fraction.slice(0, 3).padEnd(3, '0'))
+
+      return new Date(
+        Date.UTC(
+          Number(year),
+          Number(month) - 1,
+          Number(day),
+          Number(hour),
+          Number(minute),
+          Number(second),
+          milliseconds
+        )
+      )
+    }
+
+    const parsed = new Date(str)
+    return isNaN(parsed.getTime()) ? null : parsed
   }
 
-  const getMinutesDiff = (createdAt) => {
-    const orderDate = parseOrderDate(createdAt)
-    if (!orderDate) return null
+  const getMinutesDiff = (date) => {
+    const parsedDate = parseOrderDate(date)
+    if (!parsedDate) return null
 
-    const diff = Math.floor((Date.now() - orderDate.getTime()) / 60000)
+    const diff = Math.floor((Date.now() - parsedDate.getTime()) / 1000 / 60)
     return diff < 0 ? 0 : diff
   }
 
-  const timeAgo = (createdAt) => {
-    const diff = getMinutesDiff(createdAt)
+  const timeAgo = (date) => {
+    const diff = getMinutesDiff(date)
 
-    if (diff === null) return 'Time error'
+    if (diff === null) return ''
     if (diff < 1) return 'Just now'
     if (diff < 60) return `$${diff}m ago`
     if (diff < 1440) return `$${Math.floor(diff / 60)}h ago`
     return `$${Math.floor(diff / 1440)}d ago`
   }
 
-  const getAgeLabel = (createdAt) => {
-    const diff = getMinutesDiff(createdAt)
-    if (diff === null) return 'Old'
-    return diff <= 720 ? 'New' : 'Old'
+  const showNewTag = (date) => {
+    const diff = getMinutesDiff(date)
+    if (diff === null) return false
+    return diff <= 720
   }
 
-  const getAgeBadgeClass = (createdAt) => {
-    return getAgeLabel(createdAt) === 'New'
-      ? 'bg-green-700 text-white'
-      : 'bg-gray-300 text-gray-700'
+  const badgeStyle = (status, createdAt) => {
+    const normalizedStatus = String(status || '').toLowerCase()
+
+    if (normalizedStatus === 'completed') return 'bg-gray-300 text-gray-700'
+    if (normalizedStatus === 'pending') return 'bg-yellow-400 text-white'
+    if (normalizedStatus === 'new' && showNewTag(createdAt)) return 'bg-green-700 text-white'
+
+    return ''
   }
 
-  const getCompletionLabel = (status) => {
-    return String(status || '').toLowerCase() === 'completed'
-      ? 'Completed'
-      : 'Pending'
+  const badgeText = (status, createdAt) => {
+    const normalizedStatus = String(status || '').toLowerCase()
+
+    if (normalizedStatus === 'completed') return 'Completed'
+    if (normalizedStatus === 'pending') return 'Pending'
+    if (normalizedStatus === 'new' && showNewTag(createdAt)) return 'New'
+
+    return ''
   }
 
-  const getCompletionBadgeClass = (status) => {
-    return String(status || '').toLowerCase() === 'completed'
-      ? 'bg-blue-700 text-white'
-      : 'bg-yellow-400 text-black'
-  }
-
-  const todayOrders = orders.filter((order) => {
-    const orderDate = parseOrderDate(order.created_at)
+  const todayOrders = orders.filter((o) => {
+    const orderDate = parseOrderDate(o.created_at)
     if (!orderDate) return false
 
     const now = new Date()
@@ -104,16 +118,18 @@ export default function Dashboard() {
     )
   })
 
-  const pendingOrders = orders.filter(
-    (order) => String(order.status || '').toLowerCase() !== 'completed'
-  )
+  const pendingOrders = orders.filter((o) => {
+    const status = String(o.status || '').toLowerCase()
+    return status === 'new' || status === 'pending'
+  })
 
   const completedOrders = orders.filter(
-    (order) => String(order.status || '').toLowerCase() === 'completed'
+    (o) => String(o.status || '').toLowerCase() === 'completed'
   )
 
   return (
     <div className="min-h-screen bg-gray-100">
+
       <div className="bg-white px-5 py-4 flex items-center justify-between">
         <button onClick={() => setMenuOpen(true)} className="text-2xl">☰</button>
         <h1 className="text-2xl font-bold">
@@ -126,12 +142,12 @@ export default function Dashboard() {
       {menuOpen && <Menu onClose={() => setMenuOpen(false)} />}
 
       <div className="px-5 py-4">
+
         <div className="flex gap-3 mb-3">
           <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm">
             <p className="text-gray-500 text-sm">Total Orders Today</p>
             <p className="text-4xl font-bold mt-1">{todayOrders.length}</p>
           </div>
-
           <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border-2 border-green-700">
             <p className="text-gray-500 text-sm">Pending Orders</p>
             <p className="text-4xl font-bold mt-1">{pendingOrders.length}</p>
@@ -151,39 +167,30 @@ export default function Dashboard() {
           <p className="text-center text-gray-400 py-6">No orders yet</p>
         ) : (
           <div className="flex flex-col gap-3">
-            {orders.slice(0, 10).map((order) => (
-              <div
-                key={order.id}
-                className="bg-white rounded-2xl p-4 shadow-sm flex items-start justify-between"
-              >
-                <div>
-                  <p className="font-bold text-sm">
-                    {order.customer_name || 'Unknown Customer'}
-                  </p>
-                  <p className="text-gray-500 text-sm mt-1">
-                    {order.product && order.product.length > 30
-                      ? `$${order.product.slice(0, 30)}...`
-                      : order.product || 'No product'}
-                  </p>
-                </div>
+            {orders.slice(0, 10).map(order => {
+              const badge = badgeText(order.status, order.created_at)
+              const badgeClasses = badgeStyle(order.status, order.created_at)
+              const timeText = timeAgo(order.created_at)
 
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex gap-2 flex-wrap justify-end">
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium $${getAgeBadgeClass(order.created_at)}`}>
-                      {getAgeLabel(order.created_at)}
-                    </span>
-
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium $${getCompletionBadgeClass(order.status)}`}>
-                      {getCompletionLabel(order.status)}
-                    </span>
+              return (
+                <div key={order.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-start justify-between">
+                  <div>
+                    <p className="font-bold text-sm">{order.customer_name}</p>
+                    <p className="text-gray-500 text-sm mt-1">
+                      {order.product.length > 30 ? order.product.slice(0, 30) + '...' : order.product}
+                    </p>
                   </div>
-
-                  <span className="text-xs text-gray-400">
-                    {timeAgo(order.created_at)}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    {badge && (
+                      <span className={`text-xs px-3 py-1 rounded-full font-medium ${badgeClasses}`}>
+                        {badge}
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400">{timeText}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
