@@ -36,7 +36,7 @@ export default function Dashboard() {
     const str = String(value).trim()
 
     const simpleTimestampMatch = str.match(
-      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$$/
+      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/
     )
 
     if (simpleTimestampMatch) {
@@ -75,22 +75,22 @@ export default function Dashboard() {
 
     if (diff === null) return ''
     if (diff < 1) return 'Just now'
-    if (diff < 60) return `$${diff}m ago`
-    if (diff < 1440) return `$${Math.floor(diff / 60)}h ago`
-    return `$${Math.floor(diff / 1440)}d ago`
+    if (diff < 60) return `${diff}m ago`
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
+    return `${Math.floor(diff / 1440)}d ago`
   }
 
-  const isWithin12Hours = (date) => {
+  const isWithin6Hours = (date) => {
     const diff = getMinutesDiff(date)
     if (diff === null) return false
-    return diff <= 720
+    return diff <= 360
   }
 
   const badgeText = (status, createdAt) => {
     const normalizedStatus = String(status || '').toLowerCase()
 
     if (normalizedStatus === 'completed') return 'Completed'
-    if (isWithin12Hours(createdAt)) return 'New'
+    if (isWithin6Hours(createdAt)) return 'New'
     return 'Pending'
   }
 
@@ -101,7 +101,7 @@ export default function Dashboard() {
       return 'bg-gray-300 text-gray-700'
     }
 
-    if (isWithin12Hours(createdAt)) {
+    if (isWithin6Hours(createdAt)) {
       return 'bg-green-700 text-white'
     }
 
@@ -181,14 +181,14 @@ export default function Dashboard() {
                   </p>
                   <p className="text-gray-500 text-sm mt-1">
                     {order.product && order.product.length > 30
-                      ? `$${order.product.slice(0, 30)}...`
+                      ? `${order.product.slice(0, 30)}...`
                       : order.product || 'No product'}
                   </p>
                 </div>
 
                 <div className="flex flex-col items-end gap-1">
                   <span
-                    className={`text-xs px-3 py-1 rounded-full font-medium $${badgeStyle(
+                    className={`text-xs px-3 py-1 rounded-full font-medium ${badgeStyle(
                       order.status,
                       order.created_at
                     )}`}
